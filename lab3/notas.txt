@@ -1,0 +1,10 @@
+
+Tecnica antirebote
+https://www.arduino.cc/en/Tutorial/Debounce
+
+Timer
+http://playground.arduino.cc/Code/Timer1
+
+Otras fuente
+
+http://electronica-teoriaypractica.com/circuito-74247-ttl/
