@@ -115,7 +115,7 @@ void loop() {
           // only toggle the LED if the new button state is HIGH
           if (buttonState == HIGH) {
             countright++;
-            Serial.print("Contador derecho ");Serial.println(countright);
+            //Serial.print("Contador derecho ");Serial.println(countright);
           }
         }
         
@@ -154,7 +154,7 @@ void loop() {
           // only toggle the LED if the new button state is HIGH
           if (buttonState1 == HIGH) {
             countleft++;
-            Serial.print("Contador izquierdo ");Serial.println(countleft);
+            //Serial.print("Contador izquierdo ");Serial.println(countleft);
           }
         }
       
