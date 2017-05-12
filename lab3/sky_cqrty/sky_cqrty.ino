@@ -12,6 +12,11 @@ rgb_lcd lcd;
 bool primeraVez;
 int error = 1;
 Servo myServo;
+int pinServo = 5;
+int pinBoton = A0;
+int pinBuzzer = 4;
+
+const int grados = 90;  // constante de rotacion
 
 char hexaKeys[ROWS][COLS] = {
   {'1', '2', '3', 'A'},
@@ -33,20 +38,28 @@ String comando;
 
 boolean ventanaComando = false;
 
+int _length[] = {15,5,4};
+char notas[] = {"ccggaagffeeddc "};
+char sonidoCorrecto[] = {"C"};
+char sonidoIncorrecto[] = {"g"};
+int beats_correcto[] = {1,2};
+int beats_incorrecto[] = {1,2};
+
+int beats[] = {1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 2, 4};
+int tempo = 800;
+
 void setup() {
   // put your setup code here, to run once:
   lcd.begin(16, 2);
   pinMode(3, INPUT);
-  pinMode(4, INPUT);
-  primeraVez = false; //SOLO PARA PRUEBAS, DEBE SER TRUE
+  pinMode(pinBoton, INPUT);
+  pinMode(pinBuzzer, OUTPUT);
+  primeraVez = true; //SOLO PARA PRUEBAS, DEBE SER TRUE
   Serial.begin(9600);
   customKeypad.setHoldTime(3000);  // tiempo necesario para emitir evento HOLD
   customKeypad.addEventListener(keypadEvent);   //Listener de eventos para el key pad
   //attachInterrupt(4,botonPresionado,CHANGE);
 
-  for (int i = 0; i < 4; i++) {
-    contrasenas[i] = "123"; //SOLO PARA PRUEBAS, ELIMINAR
-  }
 }
 
 void loop() {
@@ -56,25 +69,29 @@ void loop() {
   
   if (!primeraVez) {
     delay(500);
-    int b = digitalRead(4);
+    
+    int b = digitalRead(pinBoton);
     while(b==0){
       limpiarVariables();
       delay(500);
       printEstados();
-      b = digitalRead(4);
+      b = digitalRead(pinBoton);
+      
+      if (estadoPuertaPrincipal) {
+      conteoPuertaAbierta();
+      }
     }
     delay(500);
     ingresarComando();
+    
+    
   } else {
     configurarPrimeraVez();
   }
  
   //Serial.println(digitalRead(4));
 
-  /**TODO
-     if (estadoPuertaPrincipal) {
-    conteoPuertaAbierta();
-    }*/
+   
 
 
 }
@@ -100,6 +117,40 @@ void keypadEvent(KeypadEvent key) {
   }
 }
 
+
+/* play tone */
+void playTone(int tone, int duration) {
+    for (long i = 0; i < duration * 1000L; i += tone * 2) {
+        digitalWrite(pinBuzzer, HIGH);
+        delayMicroseconds(tone);
+        digitalWrite(pinBuzzer, LOW);
+        delayMicroseconds(tone);
+    }
+}
+
+void playNote(char note, int duration) {
+    char names[] = { 'c', 'd', 'e', 'f', 'g', 'a', 'b', 'C' };
+    int tones[] = { 2093, 2349, 2637, 2794, 3136, 3520, 3951, 4186};
+
+    // play the tone corresponding to the note name
+    for (int i = 0; i < 8; i++) {
+        if (names[i] == note) {
+            playTone(tones[i], duration);
+        }
+    }
+}
+
+void reproducirSonido(char sonido[],int beats[], int _length){
+  for(int i = 0; i < _length; i++) {
+        if(sonido[i] == ' ') {
+            delay(beats[i] * tempo);
+        } else {
+            playNote(sonido[i], beats[i] * tempo);
+        }
+        delay(tempo / 2);    /* delay between notes */
+    }
+}
+
 // Muestra display para entrar comando.
 void ingresarComando() {
   ventanaComando = true;
@@ -111,19 +162,19 @@ void ingresarComando() {
   String msg = "Comando ";
   msg = msg + error;
   lcd.print(msg);
-  Serial.println(digitalRead(4));
+  Serial.println(digitalRead(pinBoton));
 
   pantallaInfo = false;
 
   lcd.setCursor(0, 1);
-  int button = digitalRead(4);
+  int button = digitalRead(pinBoton);
   while (ventanaComando && button == 0) {
     char key = customKeypad.getKey();
     if (key) {
       comando.concat(key);
       lcd.print(key);
     }
-    button = digitalRead(4);
+    button = digitalRead(pinBoton);
   }
   procesarComando(comando);
   lcd.clear();
@@ -139,7 +190,7 @@ void botonPresionado() {
 void restablecer() {
   String comando;
   lcd.clear(); lcd.setCursor(0, 0); lcd.print("Ingrese Master");
-  int botonCancelar = digitalRead(4);
+  int botonCancelar = digitalRead(pinBoton);
   lcd.setCursor(0, 1);
   while (botonCancelar == 0) {
     char key = customKeypad.getKey();
@@ -147,7 +198,7 @@ void restablecer() {
       comando.concat(key);
       lcd.print(key);
     }
-    botonCancelar = digitalRead(4);
+    botonCancelar = digitalRead(pinBoton);
   }
   primeraVez = comando.compareTo(contrasenas[2]) == 0;
 }
@@ -194,7 +245,7 @@ void procesarComando(String comando) {
     case 'C':
       if (comando.compareTo(contrasenas[1]) == 0) {
         avisoComandoCorrecto(tipo);
-        estadoGaraje = 1;
+        if(estadoGaraje!=1) accionarGaraje(true);
         Serial.println("Abriendo garaje");
         printEstados();
       } else {
@@ -206,7 +257,7 @@ void procesarComando(String comando) {
      case 'D':
       if (comando.compareTo(contrasenas[1]) == 0) {
         avisoComandoCorrecto(tipo);
-        estadoGaraje = 0;
+        if(estadoGaraje!=0) accionarGaraje(false);
         Serial.println("Cerrando garaje");
         printEstados();
       } else {
@@ -221,7 +272,28 @@ void procesarComando(String comando) {
   }
 }
 
+void accionarGaraje(boolean direccion){  
+  myServo.attach(pinServo);
+  if(direccion){
+    estadoGaraje =1;
+    for(int i = 0; i<=grados; i++){
+      myServo.write(i);
+      delay(15);
+    }
+  }else{
+    estadoGaraje =0;
+    for(int i = grados; i>0; i--){
+      myServo.write(i);
+      delay(15);
+    }
+  }
+  delay(100);
+  myServo.detach();
+
+}
+
 void avisoComandoCorrecto(char tipo) {
+  reproducirSonido(sonidoCorrecto,beats_correcto,_length[1]);
   switch (tipo) {
     case 'A':
       lcd.print("Alarma activada");
@@ -243,6 +315,7 @@ void avisoComandoCorrecto(char tipo) {
 }
 
 void avisoComandoIncorrecto() {
+  reproducirSonido(sonidoIncorrecto,beats_incorrecto,_length[2]);
   lcd.print("Incorrecto");
   delay(500);
 }
@@ -286,6 +359,7 @@ void conteoPuertaAbierta() {
       return;
     }
   }
+  reproducirSonido(notas,beats,_length[0]);
 }
 
 void printLCDScroll(String a) {
@@ -336,7 +410,7 @@ String ingresarContrasena(int tipoCodigo) {
       break;
   }
 
-  botonFinalizar = digitalRead(4);
+  botonFinalizar = digitalRead(pinBoton);
   Serial.println(botonFinalizar);
 
   lcd.setCursor(0, 1);
@@ -347,7 +421,7 @@ String ingresarContrasena(int tipoCodigo) {
       codigo.concat(customKey);
     }
 
-    botonFinalizar = digitalRead(4);
+    botonFinalizar = digitalRead(pinBoton);
   }
 
   lcd.clear();
@@ -377,7 +451,7 @@ String ingresarContrasena(int tipoCodigo) {
       codigo_confirm.concat(customKey);
       lcd.print("*");
     }
-    botonFinalizar = digitalRead(4);
+    botonFinalizar = digitalRead(pinBoton);
   }
 
   if (codigo.compareTo(codigo_confirm) == 0) return codigo;
@@ -395,6 +469,7 @@ void configurarPrimeraVez() {
   primeraVez = 0;
   delay(1000);
 }
+
 
 
 
