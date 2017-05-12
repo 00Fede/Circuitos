@@ -90,7 +90,6 @@ void printLCDScroll(String a){
        lcd.scrollDisplayLeft();
        delay(400);
     }
-
     lcd.clear();
 }
 
@@ -101,10 +100,10 @@ String ingresarContrasena(int tipoCodigo){
   lcd.clear(); //pone en ceros la pantalla
   switch(tipoCodigo){
     case 0:
-    printLCDScroll("codigo_1 y oprima boton");
+    printLCDScroll("Codigo_1 y oprima boton");
     break;
     case 1:
-    printLCDScroll("codigo_2 y oprima boton");
+    printLCDScroll("Codigo_2 y oprima boton");
     break;
     case 2:
     printLCDScroll("MASTER y oprima boton");
@@ -139,18 +138,34 @@ String ingresarContrasena(int tipoCodigo){
           lcd.print("*");
           codigo.concat(customKey);
     }
+    
     botonFinalizar = digitalRead(A0);
   }
 
-  delay(1000); //delay necesario para que pantalla reciba los cambios
-  
   lcd.clear();
   lcd.setCursor(0,0);
+  delay(500);
+  
+  //Verifica longitud de codigo
+  if(tipoCodigo==2){
+        if(codigo.length()<10){ 
+          lcd.print("Longitud < 10");
+          delay(1000);
+          return "";
+        }
+      }else{
+        if(codigo.length()<6){
+          lcd.print("longitud < 6");
+          delay(1000);
+          return "";
+        }
+    }
+
+   //delay necesario para que pantalla reciba los cambios
   lcd.print("Confirmar codigo");
   botonFinalizar = 0;
-  
   lcd.setCursor(0,1);
-  while(botonFinalizar==0){
+  while( botonFinalizar==0 ){
     char customKey = customKeypad.getKey();
     if (customKey){
         codigo_confirm.concat(customKey);
@@ -159,41 +174,33 @@ String ingresarContrasena(int tipoCodigo){
     botonFinalizar = digitalRead(A0);
   }
 
-  if(codigo.compareTo(codigo_confirm)==0){
-    //son iguales
-    return codigo;
-  }else{
-    return "";
-  }
+  if(codigo.compareTo(codigo_confirm)==0) return codigo;
+  return "";
 }
 
 void configurarPrimeraVez(){
 
     String contrasenas[4];
-
-
     for(int i=0;i<4;i++){
       while(contrasenas[i]== ""){
         contrasenas[i]=ingresarContrasena(i);
       }
     }
-    delay(100000);
-  
-
+    primeraVez = 0;
+    delay(1000);
 }
 
 void loop() {
   if(primeraVez){
     configurarPrimeraVez();
-  }
-
+  }else{
+    int sensorValue = digitalRead(3);
+    
+    printEstados(sensorValue); //Imprime estados de puerta, alarma, garaje y otros
   
-  int sensorValue = digitalRead(3);
-  
-  printEstados(sensorValue); //Imprime estados de puerta, alarma, garaje y otros
-
-  if(estadoPuertaPrincipal){
-    conteoPuertaAbierta();
+    if(estadoPuertaPrincipal){
+      conteoPuertaAbierta();
+    }
   }
   //prueba de teclado
   /**char customKey = customKeypad.getKey();
