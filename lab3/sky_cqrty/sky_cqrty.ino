@@ -3,50 +3,63 @@
 #include <Keypad.h>
 #include <Servo.h>
 
-const byte ROWS = 4; //four rows
-const byte COLS = 4; //four columns
-byte estadoAlarma = 1; //estado estadoAlarmaa, 0 para inactiva, 1 para activa, default 0
-byte estadoPuertaPrincipal = 0;  //Estado en que esta la puerta, 0 esta cerrada, 1 abierta
-byte estadoGaraje = 0;            // Estado garaje, 0 cerrada, 1 abierta
-rgb_lcd lcd;
-bool primeraVez;
-int error = 1;
-Servo myServo;
-int pinServo = 5;
-int pinBoton = A0;
-int pinBuzzer = 4;
-
-const int grados = 90;  // constante de rotacion
-
+/** CONSTANTES */
+const byte ROWS = 4;                  //four rows
+const byte COLS = 4;                  //four columns
+const int grados = 90;                // constante de rotacion
 char hexaKeys[ROWS][COLS] = {
   {'1', '2', '3', 'A'},
   {'4', '5', '6', 'B'},
   {'7', '8', '9', 'C'},
   {'*', '0', '#', 'D'}
 };
-byte rowPins[ROWS] = {6, 7, 8, 9}; //connect to the row pinouts of the keypad
-byte colPins[COLS] = {10, 11, 12, 13}; //connect to the column pinouts of the keypad
+const int DELAY_DISPARAR_ALARMA = 10;     // Controla cantidad de segundos antes de disparar alarma
+const byte numChars = 32;
 
-int DELAY_DISPARAR_ALARMA = 10; // Controla cantidad de segundos antes de disparar alarma
+
+
+/** ESTADOS */
+byte estadoAlarma = 1;              //estado estadoAlarmaa, 0 para inactiva, 1 para activa, default 0
+byte estadoPuertaPrincipal = 0;     //Estado en que esta la puerta, 0 esta cerrada, 1 abierta
+byte estadoGaraje = 0;              // Estado garaje, 0 cerrada, 1 abierta
+
+/** DISPOSITIVOS */
+rgb_lcd lcd;
+Servo myServo;
+
+/** BANDERAS */
+bool primeraVez;
 boolean pantallaInfo = false;
-
-Keypad customKeypad = Keypad( makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS);
-
-String contrasenas[4];
-
-String comando;
-
 boolean ventanaComando = false;
+boolean newData = false;
+boolean remoto = false;                   //indica cuando se abrio una sesión remota
+boolean salirRemoto;
 
-int _length[] = {15,5,4};
+/** VARIABLES */
+String contrasenas[4];
+String comando;
+int error = 1;
+char receivedChars[numChars];
+
+/** VARIABLES SONIDO (BETA)*/
+int _length[] = {15, 5, 4};
 char notas[] = {"ccggaagffeeddc "};
 char sonidoCorrecto[] = {"C"};
 char sonidoIncorrecto[] = {"g"};
-int beats_correcto[] = {1,2};
-int beats_incorrecto[] = {1,2};
-
+int beats_correcto[] = {1, 2};
+int beats_incorrecto[] = {1, 2};
 int beats[] = {1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 2, 4};
 int tempo = 800;
+
+/** PINES */ 
+int pinServo = 5;
+int pinBoton = A0;
+int pinBuzzer = 4;
+byte rowPins[ROWS] = {6, 7, 8, 9};     //connect to the row pinouts of the keypad
+byte colPins[COLS] = {10, 11, 12, 13}; //connect to the column pinouts of the keypad
+
+
+Keypad customKeypad = Keypad( makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS);
 
 void setup() {
   // put your setup code here, to run once:
@@ -54,60 +67,174 @@ void setup() {
   pinMode(3, INPUT);
   pinMode(pinBoton, INPUT);
   pinMode(pinBuzzer, OUTPUT);
-  primeraVez = true; //SOLO PARA PRUEBAS, DEBE SER TRUE
+  primeraVez = false; //SOLO PARA PRUEBAS, DEBE SER TRUE
   Serial.begin(9600);
   customKeypad.setHoldTime(3000);  // tiempo necesario para emitir evento HOLD
   customKeypad.addEventListener(keypadEvent);   //Listener de eventos para el key pad
   //attachInterrupt(4,botonPresionado,CHANGE);
 
+  //PRUEBA
+  contrasenas[0] = "12345"; //cod1
+  contrasenas[1] = "12345"; //cod2
+  contrasenas[2] = "12345"; //master
+  contrasenas[3] = "12345"; //remoto
 }
 
+
+
 void loop() {
-  
-  char key = customKeypad.getKey(); //necesario para que tome evento}
-  if(key) Serial.println(key);
-  
-  if (!primeraVez) {
-    delay(500);
-    
+
+  if (!primeraVez && !remoto) {
+
+    Serial.print("Entro en primera vez false");
+
+    // obtiene valores de disparadores
+    char key = customKeypad.getKey();
     int b = digitalRead(pinBoton);
-    while(b==0){
-      limpiarVariables();
-      delay(500);
-      printEstados();
-      b = digitalRead(pinBoton);
+    int sensorValue = digitalRead(3);
+
+
+    Serial.print("Estado puerta ppal: ");
+    Serial.println(estadoPuertaPrincipal);
+    Serial.print("Estado boton: ");
+    Serial.println(b);
+    Serial.println(key);
+
+    //Imprime la información ppal
+    limpiarVariables();
+    printEstados();
+
+    if (key == NO_KEY) {
+      //Estado: Remoto
+
+      empiezaSesionRemota();          //For testing purposes
+
       
-      if (estadoPuertaPrincipal) {
-      conteoPuertaAbierta();
+      switch (key) {
+        case '*':
+          remoto = true;                  //Indica que se ha iniciado una sesion remota
+          lcdPrint("Remoto Activo",0);    // Imprime en lcd el estado de la sesion remota
+          empiezaSesionRemota();          //Contiene la lógica relativa a la sesion remota
+          break;
       }
+    } else if (b != 0) {
+      //Estado: Ingresar Comando
+      ingresarComando();
+    } else if (sensorValue != 0) {
+      //Estado: Puerta Abierta
+      conteoPuertaAbierta();
     }
-    delay(500);
-    ingresarComando();
-    
-    
   } else {
     configurarPrimeraVez();
   }
- 
-  //Serial.println(digitalRead(4));
-
-   
-
 
 }
 
-void limpiarVariables() {
-  error = 1;
-  comando = "";
+//Limpia todo el lcd e imprime a en columna 0
+void lcdPrint(String a, int b){
+    if(b<2){
+      lcd.clear();
+      lcd.setCursor(0,b);
+      lcd.print(a);
+    }
+}
+
+
+void leerSerial() {
+  static byte ndx = 0;
+  char endMarker = '\n';
+  char rc;
+
+  while(Serial.available()>0 && !newData){              //ciclo mientenras haya algo disponible en serial y no sea algo nuevo
+    Serial.print("Entro a lectura, available ");
+    Serial.print(Serial.available());
+    char rc = Serial.read();                            //obtiene primer char del serial
+    Serial.println(rc);
+    if (rc != endMarker) {
+      receivedChars[ndx] = rc;
+      ndx++;
+      if (ndx >= numChars) {
+        ndx = numChars - 1;
+      }
+    }
+    else {
+      receivedChars[ndx] = '\0';            // terminate the string
+      ndx = 0;                              //resets char array
+      // return;                               // retorna y entrega el char[] con la lectura; No sirve, se necesita condicional adicional ademas de serial.available()
+      newData = true;                       // Indica que ya se termino de leer la linea y la newData llego!
+    }
+  }
+ newData = false;                          // Bandera en falso permite que proxima linea pueda ser leida
+}
+
+void empiezaSesionRemota(){
+  Serial.println("Entro en sistema remoto, bienvenido");
+  Serial.println("Ingrese contraseña");
+
+  leerSerial();                   // Lee una linea de serial y la guarda en receivedChars char array
+  Serial.print("Value in receivedChars ");Serial.println(receivedChars);
+
+  if(contrasenas[3]!=receivedChars){            // Verifica que contraseña remoto sea correcta
+    Serial.println("Contraseña incorrecta");
+    return;
+  }
+
+  Serial.println("Contraseña Correcta, Ingresando...");
+  delay(1000);
+  Serial.println("Ingrese comando");
+  Serial.println("Escriba help para recibir ayuda");
+  salirRemoto = false;
+  
+  while(!salirRemoto){                 // Mientras no se quiera salir del remoto
+    leerSerial();                               // lea instruccion
+    procesaInstruccion();                       // procese la Instruccion
+  }
+  
+  Serial.print("Value in receivedChars ");Serial.println(receivedChars);
+
+}
+
+/**
+ * Coge instruccion recibida en receivedChars y ejecuta la accion correspondiente
+ */
+void procesaInstruccion(){
+
+    String instruccion = receivedChars;
+    Serial.print("\n Value in instruccion ");Serial.println(instruccion);
+
+
+    if(instruccion.compareTo("help")==0){
+      Serial.println("Muestre help");
+    }else if(instruccion.compareTo("exit")==0){
+      Serial.println("salir del remoto");
+      salirRemoto = true;
+    }else if(instruccion.compareTo("abrirPuerta")==0){
+      Serial.println("Instruccion abrir puerta");
+    }    
+}
+
+String trimCharArray(char a[]){
+  int sizeString = sizeof(a);
+  Serial.println("tamaño de char array");
+  Serial.print(sizeString);
+  String charTrimmed;
+  for(int i = 0; i<sizeString;i++){
+    if(a[i] != ' '){
+      charTrimmed.concat(a[i]);
+    }
+    if(a[i+1] == ' '){
+      return charTrimmed;
+    }
+  }
 }
 
 void keypadEvent(KeypadEvent key) {
   switch (customKeypad.getState()) {
     //case PRESSED:
-      //if (key == '#' && pantallaInfo) ingresarComando();
-      //break;
+    //if (key == '#' && pantallaInfo) ingresarComando();
+    //break;
     case HOLD:
-      if (ventanaComando && key=='#'){ 
+      if (ventanaComando && key == '#') {
         lcd.clear();
         avisoComandoIncorrecto();
         delay(500);
@@ -120,42 +247,42 @@ void keypadEvent(KeypadEvent key) {
 
 /* play tone */
 void playTone(int tone, int duration) {
-    for (long i = 0; i < duration * 1000L; i += tone * 2) {
-        digitalWrite(pinBuzzer, HIGH);
-        delayMicroseconds(tone);
-        digitalWrite(pinBuzzer, LOW);
-        delayMicroseconds(tone);
-    }
+  for (long i = 0; i < duration * 1000L; i += tone * 2) {
+    digitalWrite(pinBuzzer, HIGH);
+    delayMicroseconds(tone);
+    digitalWrite(pinBuzzer, LOW);
+    delayMicroseconds(tone);
+  }
 }
 
 void playNote(char note, int duration) {
-    char names[] = { 'c', 'd', 'e', 'f', 'g', 'a', 'b', 'C' };
-    int tones[] = { 2093, 2349, 2637, 2794, 3136, 3520, 3951, 4186};
+  char names[] = { 'c', 'd', 'e', 'f', 'g', 'a', 'b', 'C' };
+  int tones[] = { 2093, 2349, 2637, 2794, 3136, 3520, 3951, 4186};
 
-    // play the tone corresponding to the note name
-    for (int i = 0; i < 8; i++) {
-        if (names[i] == note) {
-            playTone(tones[i], duration);
-        }
+  // play the tone corresponding to the note name
+  for (int i = 0; i < 8; i++) {
+    if (names[i] == note) {
+      playTone(tones[i], duration);
     }
+  }
 }
 
-void reproducirSonido(char sonido[],int beats[], int _length){
-  for(int i = 0; i < _length; i++) {
-        if(sonido[i] == ' ') {
-            delay(beats[i] * tempo);
-        } else {
-            playNote(sonido[i], beats[i] * tempo);
-        }
-        delay(tempo / 2);    /* delay between notes */
+void reproducirSonido(char sonido[], int beats[], int _length) {
+  for (int i = 0; i < _length; i++) {
+    if (sonido[i] == ' ') {
+      delay(beats[i] * tempo);
+    } else {
+      playNote(sonido[i], beats[i] * tempo);
     }
+    delay(tempo / 2);    /* delay between notes */
+  }
 }
 
 // Muestra display para entrar comando.
 void ingresarComando() {
   ventanaComando = true;
   delay(500);
-  
+
   lcd.clear();
   lcd.setCursor(0, 0);
   comando = "";
@@ -245,7 +372,7 @@ void procesarComando(String comando) {
     case 'C':
       if (comando.compareTo(contrasenas[1]) == 0) {
         avisoComandoCorrecto(tipo);
-        if(estadoGaraje!=1) accionarGaraje(true);
+        if (estadoGaraje != 1) accionarGaraje(true);
         Serial.println("Abriendo garaje");
         printEstados();
       } else {
@@ -254,10 +381,10 @@ void procesarComando(String comando) {
         checkErrores();
       }
       break;
-     case 'D':
+    case 'D':
       if (comando.compareTo(contrasenas[1]) == 0) {
         avisoComandoCorrecto(tipo);
-        if(estadoGaraje!=0) accionarGaraje(false);
+        if (estadoGaraje != 0) accionarGaraje(false);
         Serial.println("Cerrando garaje");
         printEstados();
       } else {
@@ -265,24 +392,24 @@ void procesarComando(String comando) {
         error++;
         checkErrores();
       }
-     default:
+    default:
       avisoComandoIncorrecto();
       error++;
       checkErrores();
   }
 }
 
-void accionarGaraje(boolean direccion){  
+void accionarGaraje(boolean direccion) {
   myServo.attach(pinServo);
-  if(direccion){
-    estadoGaraje =1;
-    for(int i = 0; i<=grados; i++){
+  if (direccion) {
+    estadoGaraje = 1;
+    for (int i = 0; i <= grados; i++) {
       myServo.write(i);
       delay(15);
     }
-  }else{
-    estadoGaraje =0;
-    for(int i = grados; i>0; i--){
+  } else {
+    estadoGaraje = 0;
+    for (int i = grados; i > 0; i--) {
       myServo.write(i);
       delay(15);
     }
@@ -293,7 +420,7 @@ void accionarGaraje(boolean direccion){
 }
 
 void avisoComandoCorrecto(char tipo) {
-  reproducirSonido(sonidoCorrecto,beats_correcto,_length[1]);
+  reproducirSonido(sonidoCorrecto, beats_correcto, _length[1]);
   switch (tipo) {
     case 'A':
       lcd.print("Alarma activada");
@@ -303,10 +430,10 @@ void avisoComandoCorrecto(char tipo) {
       lcd.print("Alarma desactivada");
       lcd.noAutoscroll();
       break;
-     case 'C':
+    case 'C':
       lcd.print("Abriendo garaje");
       break;
-     case 'D':
+    case 'D':
       lcd.print("Cerrando garaje");
       break;
   }
@@ -315,7 +442,7 @@ void avisoComandoCorrecto(char tipo) {
 }
 
 void avisoComandoIncorrecto() {
-  reproducirSonido(sonidoIncorrecto,beats_incorrecto,_length[2]);
+  reproducirSonido(sonidoIncorrecto, beats_incorrecto, _length[2]);
   lcd.print("Incorrecto");
   delay(500);
 }
@@ -350,6 +477,10 @@ void printEstados() {
   lcd.print(" Gje " + getState(estadoGaraje));
   pantallaInfo = true;
 }
+void limpiarVariables() {
+  error = 1;
+  comando = "";
+}
 
 void conteoPuertaAbierta() {
   for (int i = 0; i < DELAY_DISPARAR_ALARMA; i++) {
@@ -359,7 +490,7 @@ void conteoPuertaAbierta() {
       return;
     }
   }
-  reproducirSonido(notas,beats,_length[0]);
+  reproducirSonido(notas, beats, _length[0]);
 }
 
 void printLCDScroll(String a) {

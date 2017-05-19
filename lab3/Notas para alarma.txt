@@ -1,0 +1,18 @@
+Notas para alarma
+
+* Para ingresar a sistema remoto, se simula presionando tecla '*' del keypad 4x4.
+
+
+Operaciones de remoto
+* Muestra en pantalla remota bienvenida
+* Muestra en lcd local, el sistema remoto activado
+* Solicita contraseña
+* Espera por los comando ingresados en el serial.
+
+
+
+
+
+Serial.available, muestra lo que el usuario ha metido, cuando se ingresa hola, available es igual a 4, y seguira asi. por eso se usa la bandera newData, para saber cuando available muestra una misma entrada, o una entrada nueva.
+
+Para dejar de produccion, quitar todo lo que diga //pruebas
