@@ -16,10 +16,8 @@ char hexaKeys[ROWS][COLS] = {
 const int DELAY_DISPARAR_ALARMA = 10;     // Controla cantidad de segundos antes de disparar alarma
 const byte numChars = 32;
 
-
-
 /** ESTADOS */
-byte estadoAlarma = 1;              //estado estadoAlarmaa, 0 para inactiva, 1 para activa, default 0
+byte estadoAlarma = 1;              //estado estadoAlarmaa, 0 para inactiva, 1 para activa, default 1
 byte estadoPuertaPrincipal = 0;     //Estado en que esta la puerta, 0 esta cerrada, 1 abierta
 byte estadoGaraje = 0;              // Estado garaje, 0 cerrada, 1 abierta
 
@@ -33,7 +31,6 @@ boolean pantallaInfo = false;
 boolean ventanaComando = false;
 boolean newData = false;
 boolean remoto = false;                   //indica cuando se abrio una sesión remota
-boolean salirRemoto;
 
 /** VARIABLES */
 String contrasenas[4];
@@ -42,14 +39,14 @@ int error = 1;
 char receivedChars[numChars];
 
 /** VARIABLES SONIDO (BETA)*/
-int _length[] = {15, 5, 4};
+/**int _length[] = {15, 5, 4};
 char notas[] = {"ccggaagffeeddc "};
 char sonidoCorrecto[] = {"C"};
 char sonidoIncorrecto[] = {"g"};
 int beats_correcto[] = {1, 2};
 int beats_incorrecto[] = {1, 2};
 int beats[] = {1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 2, 4};
-int tempo = 800;
+int tempo = 800;*/
 
 /** PINES */ 
 int pinServo = 5;
@@ -90,26 +87,22 @@ void loop() {
 
     // obtiene valores de disparadores
     char key = customKeypad.getKey();
-    int b = digitalRead(pinBoton);
-    int sensorValue = digitalRead(3);
+    //int b = digitalRead(pinBoton);
+    //int sensorValue = digitalRead(3);
 
 
-    Serial.print("Estado puerta ppal: ");
+  /**  Serial.print("Estado puerta ppal: ");
     Serial.println(estadoPuertaPrincipal);
     Serial.print("Estado boton: ");
     Serial.println(b);
-    Serial.println(key);
+    Serial.println(key);*/
 
     //Imprime la información ppal
     limpiarVariables();
     printEstados();
 
-    if (key == NO_KEY) {
-      //Estado: Remoto
-
-      empiezaSesionRemota();          //For testing purposes
-
-      
+    if (key != NO_KEY) {
+      //Estado: Remoto      
       switch (key) {
         case '*':
           remoto = true;                  //Indica que se ha iniciado una sesion remota
@@ -117,13 +110,14 @@ void loop() {
           empiezaSesionRemota();          //Contiene la lógica relativa a la sesion remota
           break;
       }
-    } else if (b != 0) {
+    } 
+    /**else if (b != 0) {
       //Estado: Ingresar Comando
       ingresarComando();
     } else if (sensorValue != 0) {
       //Estado: Puerta Abierta
       conteoPuertaAbierta();
-    }
+    }*/
   } else {
     configurarPrimeraVez();
   }
@@ -139,13 +133,13 @@ void lcdPrint(String a, int b){
     }
 }
 
+  boolean leyo = false;           //Bandera para saber cuando leerSerial leyo una linea
 
 void leerSerial() {
   static byte ndx = 0;
   char endMarker = '\n';
   char rc;
-
-  while(Serial.available()>0 && !newData){              //ciclo mientenras haya algo disponible en serial y no sea algo nuevo
+  while(Serial.available()>0 && !newData ){              //ciclo mientenras haya algo disponible en serial y no sea algo nuevo
     Serial.print("Entro a lectura, available ");
     Serial.print(Serial.available());
     char rc = Serial.read();                            //obtiene primer char del serial
@@ -162,36 +156,67 @@ void leerSerial() {
       ndx = 0;                              //resets char array
       // return;                               // retorna y entrega el char[] con la lectura; No sirve, se necesita condicional adicional ademas de serial.available()
       newData = true;                       // Indica que ya se termino de leer la linea y la newData llego!
+      leyo = true;
     }
   }
- newData = false;                          // Bandera en falso permite que proxima linea pueda ser leida
+  newData = false;                          // Bandera en falso permite que proxima linea pueda ser leida
+
 }
 
 void empiezaSesionRemota(){
   Serial.println("Entro en sistema remoto, bienvenido");
   Serial.println("Ingrese contraseña");
 
-  leerSerial();                   // Lee una linea de serial y la guarda en receivedChars char array
+  while(!leyo){
+    leerSerial();                   // Lee una linea de serial y la guarda en receivedChars char array
+  }
+  
   Serial.print("Value in receivedChars ");Serial.println(receivedChars);
-
-  if(contrasenas[3]!=receivedChars){            // Verifica que contraseña remoto sea correcta
+  if(!checkPassword(3)) return;     // check remote pass and return true if correct, false otherwise
+  /**if(contrasenas[3]!=receivedChars){            // Verifica que contraseña remoto sea correcta
     Serial.println("Contraseña incorrecta");
     return;
-  }
+  }*/
 
   Serial.println("Contraseña Correcta, Ingresando...");
   delay(1000);
   Serial.println("Ingrese comando");
   Serial.println("Escriba help para recibir ayuda");
-  salirRemoto = false;
   
-  while(!salirRemoto){                 // Mientras no se quiera salir del remoto
+  while(remoto){                 // Mientras no se quiera salir del remoto
     leerSerial();                               // lea instruccion
     procesaInstruccion();                       // procese la Instruccion
   }
   
   Serial.print("Value in receivedChars ");Serial.println(receivedChars);
 
+}
+/**
+ * Checks password entrance in remote session. da 3 intentos, despues sale para volver a ingresar
+ * comando remoto. retorna true si se validan pass, false otherwise
+ */
+boolean checkPassword(int tipo){
+  int checkErrors = 1;      //contador del numero de intentos de ingreso contraseña
+  leyo = false;         // puedo leer
+  while(checkErrors <4){      //Mientras que los intentos de pass sean menores a 4
+    Serial.println("\ningrese contraseña");Serial.print("Intento ");Serial.print(checkErrors);
+    memset(receivedChars,0,sizeof(receivedChars));      // limpia el receivedChars array antes de leer contraseña
+    while(!leyo) {
+          leerSerial();       //lee contrasñea
+    }
+    leyo = false;       //para volver a leer luego
+    Serial.println("receivedChars is; ");Serial.println(receivedChars);
+    if(contrasenas[tipo].compareTo(receivedChars)!=0){
+        Serial.println("contraseña incorrecta!");
+        checkErrors++;          // Aumenta contador de intentos
+    }else{
+        return true; //si contraseña correcta
+    }
+  }
+  Serial.println("numero de intentos excedido");
+  // se llamaria restablecer aqui
+  remoto = false;       //lo expulsa del remoto, debe volver a ingresar.
+  return false; //Si sale del while es porque excedio num de intentos
 }
 
 /**
@@ -200,17 +225,45 @@ void empiezaSesionRemota(){
 void procesaInstruccion(){
 
     String instruccion = receivedChars;
-    Serial.print("\n Value in instruccion ");Serial.println(instruccion);
-
-
+    delay(100); //needed for stability
+    //Serial.println(instruccion);
     if(instruccion.compareTo("help")==0){
       Serial.println("Muestre help");
+      Serial.print("\n Comandos:\nActivar Alarma -> activarAlarma\nDesactivar Alarma -> desactivarAlarma\nAbrir garaje -> abrirGaraje\nCerrar Garaje -> cerrarGaraje\n");
     }else if(instruccion.compareTo("exit")==0){
       Serial.println("salir del remoto");
-      salirRemoto = true;
-    }else if(instruccion.compareTo("abrirPuerta")==0){
-      Serial.println("Instruccion abrir puerta");
-    }    
+      remoto = false;       //pone bandera remoto en falso para salir del loop y volver a loop ppal
+    }else if(instruccion.compareTo("activarAlarma")==0){
+      Serial.println("Instruccion activarAlarma");
+      if(!checkPassword(0)) return;               // lee pass de serial, valida con tipo y retorna si no pasa
+      estadoAlarma = 1;                           //Cambia el estado de la alarma
+      avisoComandoCorrecto('A');                  // Manda un aviso en el display del cambio de la alarma
+      printEstados();                             // Muestra pantalla principal con estados actualizados
+      Serial.println("Alarma activada.");         // Aviso confirmacion a pantalla remoto
+    }else if(instruccion.compareTo("desactivarAlarma")==0){
+      Serial.println("Instruccion desactivarAlarma");
+      if(!checkPassword(0)) return;               // lee pass de serial, valida con tipo y retorna si pasa
+      estadoAlarma = 0;
+      avisoComandoCorrecto('B');                  // Manda un aviso en el display del cambio de la alarma
+      printEstados(); 
+      Serial.println("Alarma desactivada.");         // Aviso confirmacion a pantalla remoto    
+    }else if(instruccion.compareTo("abrirGaraje")==0){
+      Serial.println("Instruccion abrirGaraje");
+      if (estadoGaraje != 1) accionarGaraje(true);  //Si garaje no esta previamente abierto, abralo, en accionarGaraje cambia el estado
+      avisoComandoCorrecto('C');                  // Manda un aviso en el display del cambio de la alarma
+      printEstados(); 
+      Serial.println("Abriendo Garaje");
+    }else if(instruccion.compareTo("cerrarGaraje")==0){
+      Serial.println("Instruccion cerrarGaraje");
+      if (estadoGaraje != 0) accionarGaraje(false);   //Si garaje no estaba previamente cerrado, cierrelo, en accionar Garaje cambia el estado
+      avisoComandoCorrecto('D');                  // Manda un aviso en el display del cambio de la alarma
+      printEstados(); 
+      Serial.println("Cerrando Garaje");
+    }else if(instruccion.compareTo("cambiarContrasenas")==0){
+      Serial.println("Instruccion cambiarContrasenas");
+      
+    }
+    memset(receivedChars,0,sizeof(receivedChars));      // limpia el comando ingresado para que no sea leido luego
 }
 
 String trimCharArray(char a[]){
@@ -254,19 +307,19 @@ void playTone(int tone, int duration) {
     delayMicroseconds(tone);
   }
 }
-
+/**
 void playNote(char note, int duration) {
   char names[] = { 'c', 'd', 'e', 'f', 'g', 'a', 'b', 'C' };
   int tones[] = { 2093, 2349, 2637, 2794, 3136, 3520, 3951, 4186};
 
-  // play the tone corresponding to the note name
+  play the tone corresponding to the note name
   for (int i = 0; i < 8; i++) {
     if (names[i] == note) {
       playTone(tones[i], duration);
     }
   }
-}
-
+}*/
+/**
 void reproducirSonido(char sonido[], int beats[], int _length) {
   for (int i = 0; i < _length; i++) {
     if (sonido[i] == ' ') {
@@ -274,9 +327,9 @@ void reproducirSonido(char sonido[], int beats[], int _length) {
     } else {
       playNote(sonido[i], beats[i] * tempo);
     }
-    delay(tempo / 2);    /* delay between notes */
+    delay(tempo / 2);
   }
-}
+}*/
 
 // Muestra display para entrar comando.
 void ingresarComando() {
@@ -420,7 +473,9 @@ void accionarGaraje(boolean direccion) {
 }
 
 void avisoComandoCorrecto(char tipo) {
-  reproducirSonido(sonidoCorrecto, beats_correcto, _length[1]);
+  //reproducirSonido(sonidoCorrecto, beats_correcto, _length[1]);
+  lcd.clear();          // limpia lo que hay previamente en el lcd
+  lcd.setCursor(0,0);
   switch (tipo) {
     case 'A':
       lcd.print("Alarma activada");
@@ -442,7 +497,7 @@ void avisoComandoCorrecto(char tipo) {
 }
 
 void avisoComandoIncorrecto() {
-  reproducirSonido(sonidoIncorrecto, beats_incorrecto, _length[2]);
+  //reproducirSonido(sonidoIncorrecto, beats_incorrecto, _length[2]);
   lcd.print("Incorrecto");
   delay(500);
 }
@@ -490,7 +545,7 @@ void conteoPuertaAbierta() {
       return;
     }
   }
-  reproducirSonido(notas, beats, _length[0]);
+  //reproducirSonido(notas, beats, _length[0]);
 }
 
 void printLCDScroll(String a) {
