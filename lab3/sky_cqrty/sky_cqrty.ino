@@ -1,190 +1,169 @@
-#include <Wire.h>
-#include "rgb_lcd.h"
-//#include <Keypad.h>
+//#include <Wire.h>
+//#include "rgb_lcd.h"
 #include <Servo.h>
 #include <Adafruit_GFX.h>    // Core graphics library
 #include <Adafruit_ST7735.h> // Hardware-specific library
 #include <SPI.h>
+#include <SD.h>
 
 // Constantes para pantalla TFT
 #define TFT_CS     10
 #define TFT_RST    9
 #define TFT_DC     8
+#define SD_CS    4  // Chip select line for SD card
+#define BUTTON_NONE 0
+#define BUTTON_DOWN 1
+#define BUTTON_RIGHT 2
+#define BUTTON_SELECT 3
+#define BUTTON_UP 4
+#define BUTTON_LEFT 5
 
 /** CONSTANTES */
-const byte ROWS = 4;                  //four rows
-const byte COLS = 4;                  //four columns
-const int grados = 90;                // constante de rotacion
-char hexaKeys[ROWS][COLS] = {
-  {'1', '2', '3', 'A'},
-  {'4', '5', '6', 'B'},
-  {'7', '8', '9', 'C'},
-  {'*', '0', '#', 'D'}
-};
-const int DELAY_DISPARAR_ALARMA = 10;     // Controla cantidad de segundos antes de disparar alarma
-const byte numChars = 32;
+//const byte ROWS = 4;                  //four rows
+//const byte COLS = 4;                  //four columns
+byte grados = 90;                // constante de rotacion
+byte DELAY_DISPARAR_ALARMA = 10;     // Controla cantidad de segundos antes de disparar alarma
 
 /** ESTADOS */
-byte estadoAlarma = 1;              //estado estadoAlarmaa, 0 para inactiva, 1 para activa, default 1
-byte estadoPuertaPrincipal = 0;     //Estado en que esta la puerta, 0 esta cerrada, 1 abierta
-byte estadoGaraje = 0;              // Estado garaje, 0 cerrada, 1 abierta
+boolean estadoAlarma = true;              //estado estadoAlarmaa, 0 para inactiva, 1 para activa, default 1
+boolean estadoPuertaPrincipal = false;     //Estado en que esta la puerta, 0 esta cerrada, 1 abierta
+boolean estadoGaraje = false;              // Estado garaje, 0 cerrada, 1 abierta
 
 /** DISPOSITIVOS */
-rgb_lcd lcd;
+//rgb_lcd lcd;
 Servo myServo;
 
 /** BANDERAS */
-bool primeraVez;
+boolean primeraVez;
 boolean pantallaInfo = false;
 boolean ventanaComando = false;
 boolean newData = false;
 boolean remoto = false;                   //indica cuando se abrio una sesión remota
+boolean leyo = false;           //Bandera para saber cuando leerSerial leyo una linea
 
 /** VARIABLES */
 String contrasenas[4];
 String comando;
-int error = 1;
-char receivedChars[numChars];
+byte error = 1;
+char receivedChars[32];
+byte pos = 0;                    // posicion actual del cursor.
+byte rebote = 0;                // maneja el antirebote en el boton analogo
 
-/** VARIABLES SONIDO (BETA)*/
-/**int _length[] = {15, 5, 4};
-  char notas[] = {"ccggaagffeeddc "};
-  char sonidoCorrecto[] = {"C"};
-  char sonidoIncorrecto[] = {"g"};
-  int beats_correcto[] = {1, 2};
-  int beats_incorrecto[] = {1, 2};
-  int beats[] = {1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 2, 4};
-  int tempo = 800;*/
 
 /** PINES */
 int pinServo = 5;
 int pinBoton = A0;
 int pinBuzzer = 4;
 int pinSensorPuerta = 3;
-byte rowPins[ROWS] = {6, 7, 8, 9};     //connect to the row pinouts of the keypad
-byte colPins[COLS] = {10, 11, 12, 13}; //connect to the column pinouts of the keypad
 
 /** INICIALIZACIÓN PERIFERICOS */
-#define TFT_SCLK 13   // set these to be whatever pins you like!
-#define TFT_MOSI 11   // set these to be whatever pins you like!
-//Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST);
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS,  TFT_DC, TFT_RST);
-//Keypad customKeypad = Keypad( makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS);
 
 void setup() {
   // put your setup code here, to run once:
-  lcd.begin(16, 2);
   tft.initR(INITR_BLACKTAB);   // initialize a ST7735S chip, black tab
   pinMode(pinSensorPuerta, INPUT);
   pinMode(pinBoton, INPUT);
   pinMode(pinBuzzer, OUTPUT);
   Serial.begin(9600);
-  //customKeypad.setHoldTime(3000);  // tiempo necesario para emitir evento HOLD
-  //customKeypad.addEventListener(keypadEvent);   //Listener de eventos para el key pad
-  //attachInterrupt(4,botonPresionado,CHANGE);
 
   tft.fillScreen(ST7735_BLACK);
-
-
-
+   printEstadosTFT();
+   
   //PRUEBA
   primeraVez = false; //SOLO PARA PRUEBAS, DEBE SER TRUE
   contrasenas[0] = "12345"; //cod1
   contrasenas[1] = "12345"; //cod2
   contrasenas[2] = "12345"; //master
   contrasenas[3] = "12345"; //remoto
+  Serial.println("Initializing SD card...");
+ if (!SD.begin(SD_CS)) {
+    Serial.println("failed!");
+    return;
+  }
 }
-
-
-
 void loop() {
+  uint8_t b = readButton();
 
-  if (!primeraVez && !remoto) {
-
-    Serial.print("Entro en primera vez false");
-
-    // obtiene valores de disparadores
-    //char key = customKeypad.getKey();
-    //int b = digitalRead(pinBoton);
-    //int sensorValue = digitalRead(3);
-    while (true) {
-      Serial.println("prueba tft");
-      printEstadosTFT(); // imprime en tft valores iniciales
-      delay(500);
-    }
-    /**  Serial.print("Estado puerta ppal: ");
-      Serial.println(estadoPuertaPrincipal);
-      Serial.print("Estado boton: ");
-      Serial.println(b);
-      Serial.println(key);*/
-
-    //Imprime la información ppal
-    limpiarVariables();
-    printEstados();
-
-
-    if (true) { //PRUEBAS
-      //Estado: Remoto
-      //PRUEBA
-      remoto = true;                  //Indica que se ha iniciado una sesion remota
-      lcdPrint("Remoto Activo", 0);   // Imprime en lcd el estado de la sesion remota
-      empiezaSesionRemota();          //Contiene la lógica relativa a la sesion remota
-     /** switch (key) {
-        case '*':
-          remoto = true;                  //Indica que se ha iniciado una sesion remota
-          lcdPrint("Remoto Activo", 0);   // Imprime en lcd el estado de la sesion remota
-          empiezaSesionRemota();          //Contiene la lógica relativa a la sesion remota
-          break;
-      }*/
-    }
-    /**else if (b != 0) {
-      //Estado: Ingresar Comando
-      ingresarComando();
-      } else if (sensorValue != 0) {
-      //Estado: Puerta Abierta
-      conteoPuertaAbierta();
-      }*/
-  } else {
-    configurarPrimeraVez();
+  if(b == BUTTON_DOWN){
+    itemSelected(pos);  // se mueve a posición, dibuja celda.
+    pos = (pos+1) % 3;  // avanza uno en la posicion
+  }
+  if(b == BUTTON_LEFT){
+    
+  }
+  if(b == BUTTON_UP){
+    
+  }
+  if(b == BUTTON_RIGHT){
+    
+  }
+  if(b == BUTTON_SELECT){
+    
   }
 
 }
 
-/**
-   Escribe texto en tft text, con color color
-*/
-void drawtext(String text, uint16_t color) {
-  tft.setCursor(0,0);
-  tft.setTextColor(color,ST7735_BLACK);
-  tft.setTextWrap(true);
-  tft.print(text);
+//logica al seleccionar item en lista
+void itemSelected(uint8_t pos){
+  Serial.println(pos);
+  if(pos == 0){
+    //cursor sobre opcion alarma
+    tft.setCursor(0,17*pos); // posicion del cursor para escribir
+    tft.fillRect(0,17*pos, tft.width(), 16, ST7735_WHITE); // dibuja un rect en posicion de pos, color blanco
+    drawtext("Alarm:",ST7735_BLACK,2,ST7735_WHITE);
+  }if(pos == 1){
+    //cursor sobre opcion door
+    
+  }
+  if(pos == 2){
+    //cursor sobre opcion garage
+    
+  }
+  
+  
 }
 
-//Limpia todo el lcd e imprime a en columna 0
-void lcdPrint(String a, int b) {
-  if (b < 2) {
-    lcd.clear();
-    lcd.setCursor(0, b);
-    lcd.print(a);
+// Lee señal de analogo y retorna numero (segun dirección)
+uint8_t readButton(void) {
+  float a = analogRead(3);
+  byte retorno;
+  
+  a *= 5.0;
+  a /= 1024.0;
+  
+  Serial.print("Button read analog = ");
+  Serial.println(a);
+  if (a < 0.2) {retorno = BUTTON_DOWN;}
+  else if(a < 1.0) {retorno = BUTTON_RIGHT;}
+  else if(a < 1.5) {retorno = BUTTON_SELECT;}
+  else if (a < 2.0) {retorno = BUTTON_UP;}
+  else if (a < 3.2) {retorno = BUTTON_LEFT;}
+  else {retorno = BUTTON_NONE;}
+  
+  if(rebote==2){
+    Serial.println("retorno ");
+    Serial.println(retorno);
+    rebote = 0; // Se reinicia contador de rebote
+    return retorno; // retorne lo que reboto
+  }else{
+    Serial.println(rebote);
+    rebote++; // Si no ha llegado rebote limite, siga sumando ando
   }
 }
-
-boolean leyo = false;           //Bandera para saber cuando leerSerial leyo una linea
 
 void leerSerial() {
   static byte ndx = 0;
   char endMarker = '\n';
   char rc;
   while (Serial.available() > 0 && !newData ) {          //ciclo mientenras haya algo disponible en serial y no sea algo nuevo
-    Serial.print("Entro a lectura, available ");
-    Serial.print(Serial.available());
     char rc = Serial.read();                            //obtiene primer char del serial
-    Serial.println(rc);
+    //Serial.println(rc);
     if (rc != endMarker) {
       receivedChars[ndx] = rc;
       ndx++;
-      if (ndx >= numChars) {
-        ndx = numChars - 1;
+      if (ndx >= 32) {
+        ndx = 32 - 1;
       }
     }
     else {
@@ -201,12 +180,6 @@ void leerSerial() {
 
 void empiezaSesionRemota() {
   Serial.println("Entro en sistema remoto, bienvenido");
-  /**
-    while(!leyo){
-      leerSerial();                   // Lee una linea de serial y la guarda en receivedChars char array
-    }*/
-
-  Serial.print("Value in receivedChars "); Serial.println(receivedChars);
   if (!checkPassword(3)) return;    // check remote pass and return true if correct, false otherwise
 
   Serial.println("Contraseña Correcta, Ingresando...");
@@ -214,12 +187,10 @@ void empiezaSesionRemota() {
   Serial.println("Ingrese comando");
   Serial.println("Escriba help para recibir ayuda");
 
-  while (remoto) {               // Mientras no se quiera salir del remoto
+  while (remoto) {                              // Mientras no se quiera salir del remoto
     leerSerial();                               // lea instruccion
     procesaInstruccion();                       // procese la Instruccion
   }
-
-  Serial.print("Value in receivedChars "); Serial.println(receivedChars);
 
 }
 /**
@@ -230,18 +201,17 @@ boolean checkPassword(int tipo) {
   int checkErrors = 1;      //contador del numero de intentos de ingreso contraseña
   leyo = false;         // puedo leer
   while (checkErrors < 4) {   //Mientras que los intentos de pass sean menores a 4
-    Serial.println("\nIngrese contraseña"); Serial.print("Intento "); Serial.print(checkErrors);
+    Serial.println("\nIngrese contraseña"); Serial.print("Intento "+checkErrors);
     memset(receivedChars, 0, sizeof(receivedChars));    // limpia el receivedChars array antes de leer contraseña
     while (!leyo) {
       leerSerial();       //lee contrasñea
     }
     leyo = false;       //para volver a leer luego
-    Serial.println("receivedChars is; "); Serial.println(receivedChars);
-    if (contrasenas[tipo].compareTo(receivedChars) != 0) {
+    if (contrasenas[tipo]==receivedChars) {
+      return true; //si contraseña correcta
+    } else {
       Serial.println("contraseña incorrecta!");
       checkErrors++;          // Aumenta contador de intentos
-    } else {
-      return true; //si contraseña correcta
     }
   }
   Serial.println("numero de intentos excedido");
@@ -257,9 +227,8 @@ void procesaInstruccion() {
 
   String instruccion = receivedChars;
   delay(100); //needed for stability
-  //Serial.println(instruccion);
   if (instruccion.compareTo("help") == 0) {
-    Serial.println("Muestre help");
+    Serial.println("Muestre ayuda");
     Serial.print("\n Comandos:\nActivar Alarma -> activarAlarma\nDesactivar Alarma -> desactivarAlarma\nAbrir garaje -> abrirGaraje\nCerrar Garaje -> cerrarGaraje\n");
   } else if (instruccion.compareTo("exit") == 0) {
     Serial.println("salir del remoto");
@@ -267,234 +236,44 @@ void procesaInstruccion() {
   } else if (instruccion.compareTo("activarAlarma") == 0) {
     Serial.println("Instruccion activarAlarma");
     if (!checkPassword(0)) return;              // lee pass de serial, valida con tipo y retorna si no pasa
-    estadoAlarma = 1;                           //Cambia el estado de la alarma
-    avisoComandoCorrecto('A');                  // Manda un aviso en el display del cambio de la alarma
-    printEstados();                             // Muestra pantalla principal con estados actualizados
+    estadoAlarma = true;                           //Cambia el estado de la alarma
+    printEstadosTFT();                            // Muestra pantalla principal con estados actualizados
     Serial.println("Alarma activada.");         // Aviso confirmacion a pantalla remoto
   } else if (instruccion.compareTo("desactivarAlarma") == 0) {
     Serial.println("Instruccion desactivarAlarma");
     if (!checkPassword(0)) return;              // lee pass de serial, valida con tipo y retorna si pasa
-    estadoAlarma = 0;
-    avisoComandoCorrecto('B');                  // Manda un aviso en el display del cambio de la alarma
-    printEstados();
+    estadoAlarma = false;
+    printEstadosTFT();                  
     Serial.println("Alarma desactivada.");         // Aviso confirmacion a pantalla remoto
   } else if (instruccion.compareTo("abrirGaraje") == 0) {
     Serial.println("Instruccion abrirGaraje");
     if (!checkPassword(1)) return;            // lee pass del serial, valida con tipo de codigo, y retorna si no pasa
-    if (estadoGaraje != 1) accionarGaraje(true);  //Si garaje no esta previamente abierto, abralo, en accionarGaraje cambia el estado
-    avisoComandoCorrecto('C');                  // Manda un aviso en el display del cambio de la alarma
-    printEstados();
+    if (!estadoGaraje) accionarGaraje(true);  //Si garaje no esta previamente abierto, abralo, en accionarGaraje cambia el estado
+    printEstadosTFT();                  
     Serial.println("Abriendo Garaje");
   } else if (instruccion.compareTo("cerrarGaraje") == 0) {
     Serial.println("Instruccion cerrarGaraje");
     if (!checkPassword(1)) return;            // lee pass del serial, valida con tipo de codigo, y retorna si no pasa
-    if (estadoGaraje != 0) accionarGaraje(false);   //Si garaje no estaba previamente cerrado, cierrelo, en accionar Garaje cambia el estado
-    avisoComandoCorrecto('D');                  // Manda un aviso en el display del cambio de la alarma
-    printEstados();
+    if (estadoGaraje) accionarGaraje(false);   //Si garaje no estaba previamente cerrado, cierrelo, en accionar Garaje cambia el estado
+    printEstadosTFT();                  
     Serial.println("Cerrando Garaje");
   } else if (instruccion.compareTo("cambiarContrasenas") == 0) {
     Serial.println("Instruccion cambiarContrasenas");
-
   }
   memset(receivedChars, 0, sizeof(receivedChars));    // limpia el comando ingresado para que no sea leido luego
-}
-
-String trimCharArray(char a[]) {
-  int sizeString = sizeof(a);
-  Serial.println("tamaño de char array");
-  Serial.print(sizeString);
-  String charTrimmed;
-  for (int i = 0; i < sizeString; i++) {
-    if (a[i] != ' ') {
-      charTrimmed.concat(a[i]);
-    }
-    if (a[i + 1] == ' ') {
-      return charTrimmed;
-    }
-  }
-}
-/**
-void keypadEvent(KeypadEvent key) {
-  switch (customKeypad.getState()) {
-    //case PRESSED:
-    //if (key == '#' && pantallaInfo) ingresarComando();
-    //break;
-    case HOLD:
-      if (ventanaComando && key == '#') {
-        lcd.clear();
-        avisoComandoIncorrecto();
-        delay(500);
-        lcd.clear();
-        printEstados();
-      }
-  }
-}*/
-
-
-/* play tone */
-void playTone(int tone, int duration) {
-  for (long i = 0; i < duration * 1000L; i += tone * 2) {
-    digitalWrite(pinBuzzer, HIGH);
-    delayMicroseconds(tone);
-    digitalWrite(pinBuzzer, LOW);
-    delayMicroseconds(tone);
-  }
-}
-/**
-  void playNote(char note, int duration) {
-  char names[] = { 'c', 'd', 'e', 'f', 'g', 'a', 'b', 'C' };
-  int tones[] = { 2093, 2|49, 2637, 2794, 3136, 3520, 3951, 4186};
-
-  play the tone corresponding to the note name
-  for (int i = 0; i < 8; i++) {
-    if (names[i] == note) {
-      playTone(tones[i], duration);
-    }
-  }
-  }*/
-/**
-  void reproducirSonido(char sonido[], int beats[], int _length) {
-  for (int i = 0; i < _length; i++) {
-    if (sonido[i] == ' ') {
-      delay(beats[i] * tempo);
-    } else {
-      playNote(sonido[i], beats[i] * tempo);
-    }
-    delay(tempo / 2);
-  }
-  }*/
-
-// Muestra display para entrar comando.
-void ingresarComando() {
-  ventanaComando = true;
-  delay(500);
-
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  comando = "";
-  String msg = "Comando ";
-  msg = msg + error;
-  lcd.print(msg);
-  Serial.println(digitalRead(pinBoton));
-
-  pantallaInfo = false;
-
-  lcd.setCursor(0, 1);
-  int button = digitalRead(pinBoton);
-  while (ventanaComando && button == 0) {
-    //char key = customKeypad.getKey();
-    /**if (key) {
-      comando.concat(key);
-      lcd.print(key);
-    }*/
-    button = digitalRead(pinBoton);
-  }
-  procesarComando(comando);
-  lcd.clear();
-}
-
-void botonPresionado() {
-  Serial.println("boton pressed");
-  if (ventanaComando) {
-    procesarComando(comando);
-  }
-}
-
-void restablecer() {
-  String comando;
-  lcd.clear(); lcd.setCursor(0, 0); lcd.print("Ingrese Master");
-  int botonCancelar = digitalRead(pinBoton);
-  lcd.setCursor(0, 1);
-  while (botonCancelar == 0) {
-    //char key = customKeypad.getKey();
-    /**if (key) {
-      comando.concat(key);
-      lcd.print(key);
-    }*/
-    botonCancelar = digitalRead(pinBoton);
-  }
-  primeraVez = comando.compareTo(contrasenas[2]) == 0;
-}
-
-void checkErrores() {
-  if (error == 4) {
-    Serial.println("ingrese master");
-    restablecer();
-  } else {
-    ingresarComando();
-  }
-}
-
-void procesarComando(String comando) {
-  char tipo = comando.charAt(0);
-  comando = comando.substring(1, comando.length());
-  Serial.println(comando);
-  lcd.clear(); lcd.setCursor(0, 0);
-  switch (tipo) {
-    case 'A':
-      if (comando.compareTo(contrasenas[0]) == 0) {
-        avisoComandoCorrecto(tipo);
-        estadoAlarma = 1;
-        Serial.println("Alarma activada");
-        printEstados();
-      } else {
-        avisoComandoIncorrecto();
-        error++;
-        checkErrores();
-      }
-      break;
-    case 'B':
-      if (comando.compareTo(contrasenas[0]) == 0) {
-        avisoComandoCorrecto(tipo);
-        estadoAlarma = 0;
-        Serial.println("Alarma desactivada");
-        printEstados();
-      } else {
-        avisoComandoIncorrecto();
-        error++;
-        checkErrores();
-      }
-      break;
-    case 'C':
-      if (comando.compareTo(contrasenas[1]) == 0) {
-        avisoComandoCorrecto(tipo);
-        if (estadoGaraje != 1) accionarGaraje(true);
-        Serial.println("Abriendo garaje");
-        printEstados();
-      } else {
-        avisoComandoIncorrecto();
-        error++;
-        checkErrores();
-      }
-      break;
-    case 'D':
-      if (comando.compareTo(contrasenas[1]) == 0) {
-        avisoComandoCorrecto(tipo);
-        if (estadoGaraje != 0) accionarGaraje(false);
-        Serial.println("Cerrando garaje");
-        printEstados();
-      } else {
-        avisoComandoIncorrecto();
-        error++;
-        checkErrores();
-      }
-    default:
-      avisoComandoIncorrecto();
-      error++;
-      checkErrores();
-  }
+  
 }
 
 void accionarGaraje(boolean direccion) {
   myServo.attach(pinServo);
   if (direccion) {
-    estadoGaraje = 1;
+    estadoGaraje = true;
     for (int i = 0; i <= grados; i++) {
       myServo.write(i);
       delay(15);
     }
   } else {
-    estadoGaraje = 0;
+    estadoGaraje = false;
     for (int i = grados; i > 0; i--) {
       myServo.write(i);
       delay(15);
@@ -505,37 +284,6 @@ void accionarGaraje(boolean direccion) {
 
 }
 
-void avisoComandoCorrecto(char tipo) {
-  //reproducirSonido(sonidoCorrecto, beats_correcto, _length[1]);
-  lcd.clear();          // limpia lo que hay previamente en el lcd
-  lcd.setCursor(0, 0);
-  switch (tipo) {
-    case 'A':
-      lcd.print("Alarma activada");
-      break;
-    case 'B':
-      lcd.autoscroll();
-      lcd.print("Alarma desactivada");
-      lcd.noAutoscroll();
-      break;
-    case 'C':
-      lcd.print("Abriendo garaje");
-      break;
-    case 'D':
-      lcd.print("Cerrando garaje");
-      break;
-  }
-  delay(1000);
-  lcd.clear();
-}
-
-void avisoComandoIncorrecto() {
-  //reproducirSonido(sonidoIncorrecto, beats_incorrecto, _length[2]);
-  lcd.print("Incorrecto");
-  delay(500);
-}
-
-
 String getState(byte state) {
   if (state) {
     return "ON";
@@ -544,39 +292,48 @@ String getState(byte state) {
 }
 
 String getEstadoPuertaPrincipal(int sensorValue) {
-  if (sensorValue == 1) {
-    estadoPuertaPrincipal = 1; // Estado puerta
-  } else {
-    estadoPuertaPrincipal = 0; // Estado puerta
-  }
+  estadoPuertaPrincipal = sensorValue == 1;
   if (estadoPuertaPrincipal) {
     return "ON";
   }
   return "OFF";
 }
 
-void printEstadosTFT() {
-  limpiarVariables();
-  int sensorValue = digitalRead(pinSensorPuerta);
-  String texto = "\nAlarm \n" + getState(estadoAlarma) +
-                 "\nDoor \n" + getEstadoPuertaPrincipal(sensorValue) +
-                 "\nGarage \n" + getState(estadoGaraje);
-  Serial.println("tft: " + texto);
-  tft.setTextColor(ST7735_RED);
-  tft.setTextSize(3);
-  drawtext(texto, ST7735_WHITE);
-  pantallaInfo = true;
+void drawtext(String text, uint16_t color, int tam, uint16_t background) {
+  tft.setTextSize(tam);
+  tft.setTextColor(color,background);
+  tft.println(text);
 }
 
-void printEstados() {
+void printEstadosTFT() {
+  tft.fillScreen(ST7735_BLACK);  // limpia el display, poniendo el fondo negro.
   limpiarVariables();
+  
   int sensorValue = digitalRead(pinSensorPuerta);
+  //String texto = "\nAlarm \n" + getState(estadoAlarma) +
+                 "\nDoor \n" + getEstadoPuertaPrincipal(sensorValue) +
+                 "\nGarage \n" + getState(estadoGaraje);
+  tft.setCursor(0, 0);
+  drawtext("Alarm:", ST7735_WHITE, 2, ST7735_BLACK);
+  if(getState(estadoAlarma)=="ON"){
+    drawtext("ON", ST7735_GREEN, 3, ST7735_BLACK);  
+  }else if(getState(estadoAlarma)=="OFF"){
+    drawtext("OFF", ST7735_RED, 3, ST7735_BLACK);  
+  }
 
-  lcd.setCursor(0, 0);
-  lcd.print("Alarm " + getState(estadoAlarma));
-  lcd.setCursor(0, 1);
-  lcd.print("Door " + getEstadoPuertaPrincipal(sensorValue));
-  lcd.print(" Gje " + getState(estadoGaraje));
+  drawtext("Door:", ST7735_WHITE, 2, ST7735_BLACK);
+  if(getEstadoPuertaPrincipal(sensorValue)=="ON"){
+    drawtext("ON", ST7735_GREEN, 3, ST7735_BLACK);  
+  }else if(getEstadoPuertaPrincipal(sensorValue)=="OFF"){
+    drawtext("OFF", ST7735_RED, 3, ST7735_BLACK);  
+  }  
+  drawtext("Garage:", ST7735_WHITE, 2, ST7735_BLACK);
+  if(getState(estadoGaraje)=="ON"){
+    drawtext("ON", ST7735_GREEN, 3, ST7735_BLACK);  
+  }else if(getState(estadoGaraje)=="OFF"){
+    drawtext("OFF", ST7735_RED, 3, ST7735_BLACK);  
+  }    
+  
   pantallaInfo = true;
 }
 
@@ -584,126 +341,5 @@ void limpiarVariables() {
   error = 1;
   comando = "";
 }
-
-void conteoPuertaAbierta() {
-  for (int i = 0; i < DELAY_DISPARAR_ALARMA; i++) {
-    //sonar pitido
-    delay(1000);
-    if (!estadoAlarma) {
-      return;
-    }
-  }
-  //reproducirSonido(notas, beats, _length[0]);
-}
-
-void printLCDScroll(String a) {
-  lcd.setCursor(16, 0);
-  char b[a.length() + 1];
-  a.toCharArray(b, a.length() + 1);
-
-  for (int i = 0; i < a.length(); i++) {
-    lcd.print(b[i]);
-    lcd.scrollDisplayLeft();
-    delay(250);
-  }
-  lcd.clear();
-}
-
-String ingresarContrasena(int tipoCodigo) {
-  String codigo;
-  String codigo_confirm;
-  int botonFinalizar;
-  lcd.clear(); //pone en ceros la pantalla
-  switch (tipoCodigo) {
-    case 0:
-      printLCDScroll("Codigo_1 y oprima boton");
-      break;
-    case 1:
-      printLCDScroll("Codigo_2 y oprima boton");
-      break;
-    case 2:
-      printLCDScroll("MASTER y oprima boton");
-      break;
-    case 3:
-      printLCDScroll("Remoto y oprima boton");
-      break;
-  }
-  lcd.setCursor(0, 0);
-  switch (tipoCodigo) {
-    case 0:
-      lcd.print("Codigo_1");
-      break;
-    case 1:
-      lcd.print("Codigo_2");
-      break;
-    case 2:
-      lcd.print("Codigo Master");
-      break;
-    case 3:
-      lcd.print("Codigo Remoto");
-      break;
-  }
-
-  botonFinalizar = digitalRead(pinBoton);
-  Serial.println(botonFinalizar);
-
-  lcd.setCursor(0, 1);
-  while (botonFinalizar == 0) {
-    //char customKey = customKeypad.getKey();
-   /** if (customKey) {
-      lcd.print("*");
-      codigo.concat(customKey);
-    }*/
-
-    botonFinalizar = digitalRead(pinBoton);
-  }
-
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  delay(500);
-
-  //Verifica longitud de codigo
-  if (tipoCodigo == 2) {
-    if (codigo.length() < 10) {
-      lcd.print("Longitud < 10");
-      delay(1000);
-      return "";
-    }
-  } else {
-    if (codigo.length() < 6) {
-      lcd.print("longitud < 6");
-      delay(1000);
-      return "";
-    }
-  }
-  lcd.print("Confirmar codigo");
-  botonFinalizar = 0;
-  lcd.setCursor(0, 1);
-  while ( botonFinalizar == 0 ) {
-    //char customKey = customKeypad.getKey();
- /**  if (customKey) {
-      codigo_confirm.concat(customKey);
-      lcd.print("*");
-    }*/
-    botonFinalizar = digitalRead(pinBoton);
-  }
-
-  if (codigo.compareTo(codigo_confirm) == 0) return codigo;
-  return "";
-}
-
-
-
-void configurarPrimeraVez() {
-  for (int i = 0; i < 4; i++) {
-    while (contrasenas[i] == "") {
-      contrasenas[i] = ingresarContrasena(i);
-    }
-  }
-  primeraVez = 0;
-  delay(1000);
-}
-
-
 
 

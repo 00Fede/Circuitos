@@ -1,0 +1,146 @@
+
+/**
+void keypadEvent(KeypadEvent key) {
+  switch (customKeypad.getState()) {
+    //case PRESSED:
+    //if (key == '#' && pantallaInfo) ingresarComando();
+    //break;
+    case HOLD:
+      if (ventanaComando && key == '#') {
+        lcd.clear();
+        avisoComandoIncorrecto();
+        delay(500);
+        lcd.clear();
+        printEstados();
+      }
+  }
+}*/
+
+
+/* play tone */
+/**
+void playTone(int tone, int duration) {
+  for (long i = 0; i < duration * 1000L; i += tone * 2) {
+    digitalWrite(pinBuzzer, HIGH);
+    delayMicroseconds(tone);
+    digitalWrite(pinBuzzer, LOW);
+    delayMicroseconds(tone);
+  }
+}*/
+/**
+  void playNote(char note, int duration) {
+  char names[] = { 'c', 'd', 'e', 'f', 'g', 'a', 'b', 'C' };
+  int tones[] = { 2093, 2|49, 2637, 2794, 3136, 3520, 3951, 4186};
+
+  play the tone corresponding to the note name
+  for (int i = 0; i < 8; i++) {
+    if (names[i] == note) {
+      playTone(tones[i], duration);
+    }
+  }
+  }*/
+/**
+  void reproducirSonido(char sonido[], int beats[], int _length) {
+  for (int i = 0; i < _length; i++) {
+    if (sonido[i] == ' ') {
+      delay(beats[i] * tempo);
+    } else {
+      playNote(sonido[i], beats[i] * tempo);
+    }
+    delay(tempo / 2);
+  }
+  }*/
+
+/**
+// Muestra display para entrar comando.
+void ingresarComando() {
+  ventanaComando = true;
+  delay(500);
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  comando = "";
+  String msg = "Comando ";
+  msg = msg + error;
+  lcd.print(msg);
+  serialPrintln(digitalRead(pinBoton));
+
+  pantallaInfo = false;
+
+  lcd.setCursor(0, 1);
+  int button = digitalRead(pinBoton);
+  while (ventanaComando && button == 0) {
+    //char key = customKeypad.getKey();
+    if (key) {
+      comando.concat(key);
+      lcd.print(key);
+    }
+    button = digitalRead(pinBoton);
+  }
+  procesarComando(comando);
+  lcd.clear();
+}*/
+
+
+
+//LOOP
+
+void loop() {
+
+  if (!primeraVez && !remoto) {
+
+    Serial.print("Entro en primera vez false");
+
+    // obtiene valores de disparadores
+    //char key = customKeypad.getKey();
+    int b = digitalRead(pinBoton);
+    //int sensorValue = digitalRead(3);
+    /**  Serial.print("Estado puerta ppal: ");
+      Serial.println(estadoPuertaPrincipal);
+      Serial.print("Estado boton: ");
+      Serial.println(b);
+      Serial.println(key);*/
+
+    //Imprime la información ppal
+    limpiarVariables();
+
+
+    if(b!=0){
+      //Algo ingreso al serial, revisarlo
+      /**leerSerial(); //lee serial y guarda lo encontrado en received chars
+      String instruccion = receivedChars; //pequeña conversion necesaria
+      //serialPrintln("recibido de serial char");serialPrintln(instruccion);
+      if(instruccion.compareTo("entrarRemoto") == 0){*/
+        Serial.println("Entrando a remoto");
+        remoto = true;                  //Indica que se ha iniciado una sesion remota
+        //lcdPrint("Remoto Activo", 0);   // Imprime en lcd el estado de la sesion remota
+        empiezaSesionRemota();          //Contiene la lógica relativa a la sesion rem
+    }
+
+
+    /**if (Serial.vai) { //PRUEBAS
+      //Estado: Remoto
+      //PRUEBA
+      remoto = true;                  //Indica que se ha iniciado una sesion remota
+      lcdPrint("Remoto Activo", 0);   // Imprime en lcd el estado de la sesion remota
+      empiezaSesionRemota();          //Contiene la lógica relativa a la sesion remota
+      switch (key) {
+        case '*':
+          remoto = true;                  //Indica que se ha iniciado una sesion remota
+          lcdPrint("Remoto Activo", 0);   // Imprime en lcd el estado de la sesion remota
+          empiezaSesionRemota();          //Contiene la lógica relativa a la sesion remota
+          break;
+      }
+    }*/
+    /**else if (b != 0) {
+      //Estado: Ingresar Comando
+      ingresarComando();
+      } else if (sensorValue != 0) {
+      //Estado: Puerta Abierta
+      conteoPuertaAbierta();
+      }*/
+  } else {
+    configurarPrimeraVez();
+  }
+
+}
