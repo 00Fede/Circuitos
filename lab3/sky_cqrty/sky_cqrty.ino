@@ -84,21 +84,31 @@ void setup() {
 }
 void loop() {
   uint8_t b = readButton();
-
+  Serial.println(b);
+  
   if(b == BUTTON_DOWN){
-    itemSelected(pos);  // se mueve a posición, dibuja celda.
-    pos = (pos+1) % 3;  // avanza uno en la posicion
+    
+     pos = (pos+1) % 3;  // avanza uno en la posicion
+     itemSelected(pos);  // se mueve a posición, dibuja celda.
+     
   }
   if(b == BUTTON_LEFT){
     
   }
   if(b == BUTTON_UP){
-    
+    if(pos <= 0){
+      pos=3;
+      }
+     pos = (pos-1) % 3;  // avanza uno en la posicion
+     itemSelected(pos);  // se mueve a posición, dibuja celda.
+   
   }
   if(b == BUTTON_RIGHT){
     
   }
   if(b == BUTTON_SELECT){
+    
+    itemClick(pos);
     
   }
 
@@ -109,25 +119,92 @@ void itemSelected(uint8_t pos){
   Serial.println(pos);
   if(pos == 0){
     //cursor sobre opcion alarma
-    tft.setCursor(0,17*pos); // posicion del cursor para escribir
-    tft.fillRect(0,17*pos, tft.width(), 16, ST7735_WHITE); // dibuja un rect en posicion de pos, color blanco
+    tft.setCursor(0,(17+24)*pos); // posicion del cursor para escribir
+    tft.fillRect(0,(17+24)*pos, tft.width(), 16, ST7735_WHITE); // dibuja un rect en posicion de pos, color blanco
     drawtext("Alarm:",ST7735_BLACK,2,ST7735_WHITE);
+    despintar(pos);
   }if(pos == 1){
     //cursor sobre opcion door
-    
+    tft.setCursor(0,(17+24)*pos); // posicion del cursor para escribir
+    tft.fillRect(0,(17+24)*pos, tft.width(), 16, ST7735_WHITE); // dibuja un rect en posicion de pos, color blanco
+    drawtext("Door:",ST7735_BLACK,2,ST7735_WHITE);
+    despintar(pos);
+        
   }
   if(pos == 2){
     //cursor sobre opcion garage
+    tft.setCursor(0,(17+24)*pos); // posicion del cursor para escribir
+    tft.fillRect(0,(17+24)*pos, tft.width(), 16, ST7735_WHITE); // dibuja un rect en posicion de pos, color blanco
+    drawtext("Garage:",ST7735_BLACK,2,ST7735_WHITE);
+    despintar(pos);
     
   }
   
   
 }
 
+//Despinta los item no seleccionados
+
+void despintar(uint8_t pos){
+   if(pos == 0){
+    //cursor sobre opcion alarma y despinta los demas
+    tft.setCursor(0,(17+24)*1); // posicion del cursor para escribir
+    tft.fillRect(0,(17+24)*1, tft.width(), 16, ST7735_BLACK); // dibuja un rect en posicion de pos, color blanco
+    drawtext("Door:", ST7735_WHITE, 2, ST7735_BLACK);
+    tft.setCursor(0,(17+24)*2); // posicion del cursor para escribir
+    tft.fillRect(0,(17+24)*2, tft.width(), 16, ST7735_BLACK); // dibuja un rect en posicion de pos, color blanco
+    drawtext("Garage:", ST7735_WHITE, 2, ST7735_BLACK);
+  }if(pos == 1){
+    //cursor sobre opcion door
+    tft.setCursor(0,(17+24)*0); // posicion del cursor para escribir
+    tft.fillRect(0,(17+24)*0, tft.width(), 16, ST7735_BLACK); // dibuja un rect en posicion de pos, color blanco
+    drawtext("Alarm:", ST7735_WHITE, 2, ST7735_BLACK);
+    tft.setCursor(0,(17+24)*2); // posicion del cursor para escribir
+    tft.fillRect(0,(17+24)*2, tft.width(), 16, ST7735_BLACK); // dibuja un rect en posicion de pos, color blanco
+    drawtext("Garage:", ST7735_WHITE, 2, ST7735_BLACK);
+    
+  }
+  if(pos == 2){
+    //cursor sobre opcion garage
+    tft.setCursor(0,(17+24)*0); // posicion del cursor para escribir
+    tft.fillRect(0,(17+24)*0, tft.width(), 16, ST7735_BLACK); // dibuja un rect en posicion de pos, color blanco
+    drawtext("Alarm:", ST7735_WHITE, 2, ST7735_BLACK);
+    tft.setCursor(0,(17+24)*1); // posicion del cursor para escribir
+    tft.fillRect(0,(17+24)*1, tft.width(), 16, ST7735_BLACK); // dibuja un rect en posicion de pos, color blanco
+    drawtext("Door:", ST7735_WHITE, 2, ST7735_BLACK);
+    } 
+  }
+
+//Cambia la opcion al dar click sobre la opcion 
+void itemClick(uint8_t pos){  
+ 
+ if(pos == 0){
+    //cursor sobre opcion alarma
+     if(getState(estadoAlarma)=="ON"){
+        estadoAlarma = false; 
+  }else if(getState(estadoAlarma)=="OFF"){
+        estadoAlarma=true; }
+  }
+  if(pos == 1){
+    //cursor sobre opcion door
+    
+    
+  }
+  if(pos == 2){
+    //cursor sobre opcion garage
+     if(getState(estadoGaraje)=="ON"){
+        estadoGaraje = false; 
+  }else if(getState(estadoGaraje)=="OFF"){
+      estadoGaraje=true; }
+    } 
+    printEstadosTFT();
+  }//fin click
+ 
+
 // Lee señal de analogo y retorna numero (segun dirección)
 uint8_t readButton(void) {
   float a = analogRead(3);
-  byte retorno;
+  uint8_t retorno;
   
   a *= 5.0;
   a /= 1024.0;
@@ -142,13 +219,11 @@ uint8_t readButton(void) {
   else {retorno = BUTTON_NONE;}
   
   if(rebote==2){
-    Serial.println("retorno ");
-    Serial.println(retorno);
     rebote = 0; // Se reinicia contador de rebote
     return retorno; // retorne lo que reboto
   }else{
-    Serial.println(rebote);
     rebote++; // Si no ha llegado rebote limite, siga sumando ando
+    return 0;
   }
 }
 
